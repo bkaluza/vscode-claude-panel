@@ -54,6 +54,8 @@ const pending = new Map();
 const pendingColor = new Map();
 /** terminal → { id, name }: a /rename for the session in it, sent once it's idle (and only if it's still that one) */
 const pendingName = new Map();
+/** terminals whose session goes to the Claude desktop app (/desktop) once it's idle */
+const pendingDesktop = new Set();
 /** terminal → session id last seen running in it */
 const termSession = new Map();
 /** terminal → consecutive polls with no Claude running in it */
@@ -333,6 +335,8 @@ function trackRemembered() {
       const has = [names.fromClaude(sessions.get(id)), e.nameSource === 'user' ? names.clean(e.name) : ''];
       if (rename.id === id && rename.name && !has.includes(rename.name)) commands.push(`/rename ${rename.name}`);
     }
+    // Last: /desktop ends the session here.
+    if (pendingDesktop.delete(e.terminal)) commands.push('/desktop');
     commands.forEach((c, i) => {
       setTimeout(() => e.terminal.sendText(c, false), i * 500);
       setTimeout(() => e.terminal.sendText('\r', false), i * 500 + 150);
@@ -715,6 +719,10 @@ async function moreActions(id) {
     { label: '$(repo-forked) Fork into a new session', run: () => resume(id, { fork: true }) },
     ...(live.get(id) && !live.get(id).terminal ? [{ label: '$(play) Open here as well…', run: () => resume(id) }] : []),
     ...(live.get(id)?.terminal ? [{ label: '$(close) Close session', run: closeSession }] : []),
+    // No Claude desktop app on Linux.
+    ...(live.get(id)?.terminal && process.platform !== 'linux'
+      ? [{ label: '$(device-desktop) Resume in Claude Desktop', run: resumeInDesktop }]
+      : []),
     { label: '', kind: vscode.QuickPickItemKind.Separator },
     { label: '$(eye) Open read-only view', run: openView },
     {
@@ -745,6 +753,12 @@ async function closeSession(id) {
     if (ok !== 'Close') return;
   }
   e.terminal.dispose();
+}
+
+// Hands the session to the Claude desktop app with /desktop once it's idle; Claude Code ends it here.
+function resumeInDesktop(id) {
+  const t = live.get(id)?.terminal;
+  if (t) pendingDesktop.add(t);
 }
 
 // Move up / down within the session's section, where it has somewhere to go.
@@ -1199,6 +1213,7 @@ function activate(ctx) {
       pending.delete(t);
       pendingColor.delete(t);
       pendingName.delete(t);
+      pendingDesktop.delete(t);
       if (id && t.exitStatus?.reason !== vscode.TerminalExitReason.Shutdown) {
         setRemembered(remembered().filter((x) => x !== id));
       }
