@@ -56,6 +56,8 @@ const pendingColor = new Map();
 const pendingName = new Map();
 /** terminals whose session goes to the Claude desktop app (/desktop) once it's idle */
 const pendingDesktop = new Set();
+/** terminal → session id it sent there: the terminal closes once the app runs the session */
+const handedOff = new Map();
 /** terminal → session id last seen running in it */
 const termSession = new Map();
 /** terminal → consecutive polls with no Claude running in it */
@@ -336,7 +338,10 @@ function trackRemembered() {
       if (rename.id === id && rename.name && !has.includes(rename.name)) commands.push(`/rename ${rename.name}`);
     }
     // Last: /desktop ends the session here.
-    if (pendingDesktop.delete(e.terminal)) commands.push('/desktop');
+    if (pendingDesktop.delete(e.terminal)) {
+      commands.push('/desktop');
+      handedOff.set(e.terminal, id);
+    }
     commands.forEach((c, i) => {
       setTimeout(() => e.terminal.sendText(c, false), i * 500);
       setTimeout(() => e.terminal.sendText('\r', false), i * 500 + 150);
@@ -354,6 +359,13 @@ function trackRemembered() {
     }
   }
   if (add.length || drop.length) setRemembered([...ids.filter((id) => !drop.includes(id)), ...add]);
+  // Not before the app runs the session: if /desktop failed, its terminal shows why.
+  for (const [t, id] of handedOff) {
+    const l = live.get(id);
+    if (!l || l.terminal || elsewhere.where(l) !== 'app') continue;
+    handedOff.delete(t);
+    t.dispose();
+  }
 }
 
 // ---------------------------------------------------------------- terminals
@@ -1214,6 +1226,7 @@ function activate(ctx) {
       pendingColor.delete(t);
       pendingName.delete(t);
       pendingDesktop.delete(t);
+      handedOff.delete(t);
       if (id && t.exitStatus?.reason !== vscode.TerminalExitReason.Shutdown) {
         setRemembered(remembered().filter((x) => x !== id));
       }

@@ -42,8 +42,8 @@ terminals, and reopen them after a restart.
 - **Current session**: the one whose terminal is active is framed in its colour.
 - **Your order**: drag open and pinned sessions within their section, or *Move up* / *Move down* in `⋯`. Cmd+1–9 follow it.
 - **Skip permissions** switch adds `--dangerously-skip-permissions` to every launch.
-- `⋯` menu: rename, colour, pin, hide, move up / down, fork, resume in Claude Desktop (as `/desktop` does), open the
-  read-only view or the raw transcript, copy the id or the resume command.
+- `⋯` menu: rename, colour, pin, hide, move up / down, fork, resume in Claude Desktop (as `/desktop` does, then closes
+  its terminal), open the read-only view or the raw transcript, copy the id or the resume command.
 
 The panel lives in the Secondary Side Bar (the right-hand one). **Cmd+Alt+C** (Ctrl+Alt+C) shows it.
 
