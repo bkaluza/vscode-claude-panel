@@ -15,6 +15,7 @@ const tally = require('./media/tally');
 const names = require('./names');
 const elsewhere = require('./elsewhere');
 const desktop = require('./desktop');
+const results = require('./results');
 
 const CLAUDE_DIR = transcripts.claudeDir(); // ~/.claude, or $CLAUDE_CONFIG_DIR
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
@@ -868,6 +869,20 @@ function openAgentView(sessionId, agentId, file = subagents.transcript(sessionId
   viewerPanel.open({ file, kind: 'agent', sessionId, agentId, title });
 }
 
+// Documents VS Code can't show: in their own app, on this machine (in a remote window VS Code tries).
+const OWN_APP = /\.(pdf|docx?|xlsx?|pptx?|od[tsp]|pages|numbers|key)$/i;
+
+// A result on a session's card, by the key the panel sent back: only one its transcript recorded.
+async function openResult(id, key) {
+  const r = results.get(sessions.get(id)?.results, key);
+  if (!r) return;
+  if (r.key.startsWith('https://')) return vscode.env.openExternal(vscode.Uri.parse(r.key));
+  if (!fs.existsSync(r.key)) return vscode.window.showInformationMessage(`"${path.basename(r.key)}" has been moved or deleted.`);
+  const uri = vscode.Uri.file(r.key);
+  if (OWN_APP.test(r.key) && !vscode.env.remoteName) return vscode.env.openExternal(uri);
+  return vscode.commands.executeCommand('vscode.open', uri);
+}
+
 const runningAgents = (agents) => agents.filter((a) => a.state === 'run').length;
 
 // The view's header: its title and what the session or agent is doing, from the same state the panel shows.
@@ -996,6 +1011,7 @@ function payload() {
       current: id === current.id ? (current.behind ? 'behind' : 'front') : '',
       ctx: usage.forPayload(s, cfg().get('contextWindow')), // [tokens in use, window size]
       agents,
+      results: cfg().get('showResults') ? results.forPayload(s.results) : undefined, // what it published, opened or sent you
       // the session that started it, when the Claude desktop app says so: shown under it
       parent: lineage.get(id)?.parentCliId || '',
       fork: lineage.get(id)?.kind === 'fork',
@@ -1141,6 +1157,8 @@ async function handleMessage(m) {
       return moreActions(m.id);
     case 'openAgent':
       return openAgentView(m.id, m.agent);
+    case 'openResult':
+      return openResult(m.id, m.key);
     case 'reopenLast':
       return restoreLast();
     case 'dismissLast':
@@ -1221,10 +1239,15 @@ function activate(ctx) {
       if (!e.affectsConfiguration('claudeSessions')) return;
       if (e.affectsConfiguration('claudeSessions.terminalLocation') && splitMode()) moveSessionsToSplit();
       if (e.affectsConfiguration('claudeSessions.sessionShortcuts')) offerSlotKeysInTerminal();
+      if (e.affectsConfiguration('claudeSessions.showResults') && results.enable(cfg().get('showResults'))) {
+        transcripts.forget(); // not read while it was off
+        tick();
+      }
       refresh();
     })
   );
 
+  results.enable(cfg().get('showResults'));
   const timer = setInterval(tick, POLL_MS);
   ctx.subscriptions.push({ dispose: () => clearInterval(timer) });
   offerSlotKeysInTerminal();

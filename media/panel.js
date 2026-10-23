@@ -7,6 +7,7 @@
   let drag; // { id, list } while a card is dragged; renders wait until it's dropped
   let renderLater = false;
   ui.agents ||= {}; // session id → true (subagents expanded) or 'all' (older ones too)
+  ui.results ||= {}; // the same for its results
   // session id → false / true (the sessions it started collapsed / expanded, as you left them), or 'all' (older ones
   // too). Unset: expanded while one of them is recent, collapsed when they're all older.
   ui.kids ||= {};
@@ -36,6 +37,11 @@
     chevron: '<path d="M6 4l4 4-4 4"/>',
     history: '<path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 2.5v2.5H5"/><path d="M8 5v3l2 1.5"/>',
     info: '<circle cx="8" cy="8" r="5.75"/><path d="M8 7.25v3.5"/><circle cx="8" cy="5.25" r=".5" fill="currentColor"/>',
+    artifact: '<path d="M8 2.5l5.5 5.5L8 13.5 2.5 8z"/>',
+    doc: '<path d="M4 2.5h5l3 3v8H4z"/><path d="M6.5 8.5h3M6.5 11h3"/>',
+    pr: '<circle cx="4.5" cy="4" r="1.5"/><circle cx="4.5" cy="12" r="1.5"/><circle cx="11.5" cy="12" r="1.5"/><path d="M4.5 5.5v5M11.5 10.5V7a2 2 0 0 0-2-2H7.5"/>',
+    file: '<path d="M10.5 6l-4 4a1.4 1.4 0 0 0 2 2l4.5-4.5a2.8 2.8 0 0 0-4-4L4.5 8a4.2 4.2 0 0 0 6 6"/>',
+    plan: '<path d="M3 4.5l1 1 2-2M3 10.5l1 1 2-2M8.5 4.5H13M8.5 10.5H13"/>',
   };
   const icon = (name) =>
     `<svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -171,6 +177,20 @@
         break;
       case 'agent':
         vscode.postMessage({ type: 'openAgent', id, agent: el.dataset.agent });
+        break;
+      case 'results':
+        if (ui.results[id]) delete ui.results[id];
+        else ui.results[id] = true;
+        save();
+        render();
+        break;
+      case 'resultsAll':
+        ui.results[id] = ui.results[id] === 'all' ? true : 'all';
+        save();
+        render();
+        break;
+      case 'result':
+        vscode.postMessage({ type: 'openResult', id, key: el.dataset.key });
         break;
       case 'section': {
         const key = el.dataset.key;
@@ -429,6 +449,47 @@
       </div>`;
   }
 
+  // ---------------------------------------------------------------- results
+
+  const RESULTS_SHOWN = 5; // newest results listed without "Show older"
+  const RESULT_KINDS = { artifact: 'artifact', doc: 'doc', pr: 'PR', mr: 'MR', file: 'file', plan: 'plan' };
+
+  // The disclosure line under a session that published, opened or sent you something: "› 3 results".
+  function resultsToggle(s) {
+    if (!s.results?.length) return '';
+    const open = !!ui.results[s.id];
+    return `
+          <button class="agents-toggle${open ? ' expanded' : ''}" data-act="results" aria-expanded="${open}"
+                  title="${open ? 'Hide' : 'Show'} what it published, opened and sent you">
+            ${icon('chevron')}<span>${plural(s.results.length, 'result')}</span>
+          </button>`;
+  }
+
+  function resultRow(r) {
+    const kind = RESULT_KINDS[r.kind] || r.kind;
+    return `
+        <button class="agent result" data-act="result" data-key="${esc(r.key)}"
+                title="${esc(`${r.title}\n${r.key}\n${kind}, ${new Date(r.at).toLocaleString()}`)}">
+          ${icon(r.kind === 'mr' ? 'pr' : ICONS[r.kind] ? r.kind : 'file')}
+          <span class="agent-desc">${esc(r.title)}</span>
+          <span class="agent-time">${esc(kind)}</span>
+        </button>`;
+  }
+
+  function resultList(s) {
+    const mode = ui.results[s.id];
+    if (!mode || !s.results?.length) return '';
+    const all = mode === 'all';
+    const older = s.results.length - RESULTS_SHOWN;
+    const more =
+      older > 0 ? `<button class="link agents-more" data-act="resultsAll">${all ? 'Show recent only' : `Show ${older} older`}</button>` : '';
+    return `
+      <div class="agents results" data-id="${esc(s.id)}" role="group" aria-label="Results of ${esc(s.title)}">
+        ${(all ? s.results : s.results.slice(0, RESULTS_SHOWN)).map(resultRow).join('')}
+        ${more}
+      </div>`;
+  }
+
   // What a live session is doing now ("Editing extension.js"), or what it waits for. Derived from the transcript, so
   // a step behind: Claude Code writes each block when it's finished.
   function activityLine(s) {
@@ -500,10 +561,10 @@
     return i >= 0 && i < 9 ? `<kbd class="slot" title="Press ${esc(state.mod)}${i + 1} to switch here">${esc(state.mod)}${i + 1}</kbd>` : '';
   }
 
-  // Inside a card, under its text, one tree of what it started: the sessions (nested cards) and then the subagents,
-  // each list right under its own toggle, both at the same indent. The card's frame, colour bar and tint wrap it.
+  // Inside a card, under its text, one tree of what it started: the sessions (nested cards), the subagents, then its
+  // results, each list right under its own toggle, all at the same indent. The card's frame, colour bar and tint wrap it.
   function treeOf(s) {
-    const html = kidsToggle(s) + kidList(s) + agentsToggle(s) + agentList(s);
+    const html = kidsToggle(s) + kidList(s) + agentsToggle(s) + agentList(s) + resultsToggle(s) + resultList(s);
     return html.trim() ? `<div class="tree" data-id="${esc(s.id)}">${html}</div>` : '';
   }
 

@@ -6,6 +6,7 @@ const path = require('path');
 const usage = require('./usage');
 const subagents = require('./subagents');
 const activity = require('./activity');
+const results = require('./results');
 
 /** Claude Code's config dir: $CLAUDE_CONFIG_DIR when set (Claude Code's own override), else ~/.claude. */
 function claudeDir(env = process.env, home = os.homedir()) {
@@ -76,10 +77,14 @@ function readChunk(info, text) {
   Object.assign(info, usage.scan(text));
   subagents.scanText(info, text); // subagent completions, for subagents.update()
   info.act = activity.scan(info.act, text); // what it's doing now, for the card's activity line
+  info.results = results.scan(info.results, text); // what it published, opened or sent you
 }
 
 /** file → { offset, info } — session files are append-only, so only new bytes are parsed */
 const fileCache = new Map();
+
+/** Reads every transcript again from the start on the next scan (results turned on). */
+const forget = () => fileCache.clear();
 
 async function readSession(file, cache = fileCache) {
   const st = await fs.promises.stat(file);
@@ -142,6 +147,7 @@ module.exports = {
   findTranscript,
   readChunk,
   readSession,
+  forget,
   pickName,
   pickTitle,
   isLiveRecord,

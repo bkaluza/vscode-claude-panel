@@ -38,6 +38,9 @@ terminals, and reopen them after a restart.
 - **Read-only view** of a session's transcript in an editor tab, following it live: your prompts, Claude's replies,
   tool calls with their input and results, subagents (open each in its own view), compactions and turn times.
   From the `⋯` menu or **Session Panel: Open Read-only View…**.
+- **Results**: *› N results* lists the artifacts and docs a session published, the pull and merge requests it
+  opened, the files it sent you and the plans you approved. Click one to open it: links in your browser, files in
+  VS Code, PDFs and Office documents in their own app. Turn it off with `claudeSessions.showResults`.
 - **Context usage**: a bar with tokens in use against the context window.
 - **Current session**: the one whose terminal is active is framed in its colour.
 - **Your order**: drag open and pinned sessions within their section, or *Move up* / *Move down* in `⋯`. Cmd+1–9 follow it.
@@ -100,6 +103,7 @@ changes.
 | `claudeSessions.includeSubfolders` | `true` | also list sessions started in subfolders of the workspace |
 | `claudeSessions.maxRecent` | `100` | how many past sessions to list |
 | `claudeSessions.elsewhereIdleHours` | `1` | a session running elsewhere idle this many hours moves from *Running elsewhere* to the day groups; `0` = never |
+| `claudeSessions.showResults` | `true` | list each session's results on its card |
 | `claudeSessions.contextWindow` | `0` | context window for the usage bar; `0` = auto (1M, or 200K for Claude 3/4 models) |
 | `claudeSessions.command` | `claude` | the command that starts Claude Code |
 | `claudeSessions.extraArgs` | `[]` | extra arguments for every launch |

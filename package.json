@@ -367,6 +367,11 @@
           "minimum": 0,
           "description": "A session running elsewhere (another window, a terminal outside VS Code, the Claude desktop app) that has been idle this many hours leaves \"Running elsewhere\" and is listed by day with the others, still marked as running. 0 = keep them all under \"Running elsewhere\"."
         },
+        "claudeSessions.showResults": {
+          "type": "boolean",
+          "default": true,
+          "description": "List what each session handed you on its card: artifacts and docs it published, pull and merge requests it opened, files it sent you and plans you approved."
+        },
         "claudeSessions.contextWindow": {
           "type": "number",
           "default": 0,
