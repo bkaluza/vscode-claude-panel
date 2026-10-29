@@ -29,7 +29,7 @@ const MTIMES = {
 };
 
 /** A copy of the fixture project with file times set, and the session read the way extension.js reads it. */
-async function setup() {
+async function setup(extra) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-sessions-agents-'));
   dirs.push(dir);
   fs.cpSync(path.join(__dirname, 'fixtures', 'agents'), dir, { recursive: true });
@@ -38,6 +38,7 @@ async function setup() {
     for (const f of [`agent-${id}.jsonl`, `agent-${id}.meta.json`]) fs.utimesSync(path.join(sub, f), T(hms) / 1000, T(hms) / 1000);
   }
   const file = path.join(dir, `${SID}.jsonl`);
+  extra?.(sub, file);
   fs.utimesSync(file, T('10:11:01') / 1000, T('10:11:01') / 1000);
   const info = await transcripts.readSession(file, new Map());
   return { dir, sessions: new Map([[SID, info]]) };
@@ -121,4 +122,57 @@ test('agents written before this Claude process started are not running', async 
   const a = await agentsOf(sessions, new Map([[SID, { sessionId: SID, startedAt: T('11:00:00') }]]));
   assert.equal(a.a04run.state, 'stopped');
   assert.equal(a.a09child.state, 'stopped');
+});
+
+// Two Workflow runs: one finished (its completion notice is in the session), one still going.
+function addWorkflows(sub, file) {
+  const line = (o) => JSON.stringify({ isSidechain: false, sessionId: SID, parentUuid: 'x', ...o }) + '\n';
+  for (const [run, task, name, at] of [
+    ['wf_done-001', 'wdone1', 'audit-payments', '10:02:00'],
+    ['wf_live-002', 'wlive2', 'review-mr', '10:10:30'],
+  ]) {
+    const result = { status: 'async_launched', taskId: task, taskType: 'local_workflow', workflowName: name, runId: run };
+    fs.appendFileSync(file, line({ timestamp: `2026-03-02T${at}.000Z`, type: 'user', toolUseResult: result, message: { role: 'user', content: 'Workflow launched in background.' } }));
+  }
+  const note = '<task-notification>\n<task-id>wdone1</task-id>\n<status>completed</status>\n</task-notification>';
+  fs.appendFileSync(file, line({ timestamp: '2026-03-02T10:11:00.000Z', type: 'user', message: { role: 'user', content: note } }));
+  const agents = {
+    'wf_done-001': { w1a: ['10:03:00', 'scan:api', 'result'], w1b: ['10:04:00', 'scan:db', 'result'] },
+    'wf_live-002': { w2a: ['10:12:00', 'review:ui', 'result'], w2b: ['10:20:00', 'verify:ui', ''] },
+  };
+  for (const [run, list] of Object.entries(agents)) {
+    const d = path.join(sub, 'workflows', run);
+    fs.mkdirSync(d, { recursive: true });
+    const journal = ['{"type":"launched"}'];
+    for (const [id, [hms, label, end]] of Object.entries(list)) {
+      fs.writeFileSync(path.join(d, `agent-${id}.meta.json`), JSON.stringify({ agentType: 'workflow-subagent', description: label, spawnDepth: 1 }));
+      fs.writeFileSync(path.join(d, `agent-${id}.jsonl`), `{"isSidechain":true,"agentId":"${id}","type":"user","timestamp":"2026-03-02T${hms}.000Z"}\n`);
+      fs.utimesSync(path.join(d, `agent-${id}.jsonl`), T(hms) / 1000, T(hms) / 1000);
+      journal.push(JSON.stringify({ type: 'started', agentId: id, label, phase: label.split(':')[0] }));
+      if (end) journal.push(JSON.stringify({ type: end, agentId: id, result: 'ok' }));
+    }
+    fs.writeFileSync(path.join(d, 'journal.jsonl'), journal.join('\n') + '\n');
+  }
+}
+
+test('workflow runs: one row each, their agents right under it', async () => {
+  const { sessions } = await setup(addWorkflows);
+  const live = new Map([[SID, { sessionId: SID, startedAt: T('10:00:00') }]]);
+  const a = await agentsOf(sessions, live);
+  assert.deepEqual(
+    ['wf_done-001', 'wf_live-002'].map((id) => [a[id].desc, a[id].state, a[id].workflow]),
+    [['audit-payments', 'done', true], ['review-mr', 'run', true]]
+  );
+  assert.equal(a['wf_done-001'].end, T('10:11:00')); // its completion notice
+  assert.equal(a['wf_live-002'].phase, 'verify');
+  assert.deepEqual([a.w1a.state, a.w1b.state, a.w2a.state, a.w2b.state], ['done', 'done', 'done', 'run']);
+  assert.equal(a.w2b.wf, 'wf_live-002');
+  assert.equal(a.w2b.depth, 2);
+  const order = subagents.get(SID).map((x) => x.id);
+  const at = order.indexOf('wf_live-002');
+  assert.deepEqual(order.slice(at, at + 3), ['wf_live-002', 'w2b', 'w2a']);
+  assert.ok(subagents.transcript(SID, 'w2b').endsWith(path.join('workflows', 'wf_live-002', 'agent-w2b.jsonl')));
+  // Once the session's Claude is gone, the unfinished run and its agent are stopped.
+  const after = await agentsOf(sessions, new Map());
+  assert.deepEqual([after['wf_live-002'].state, after.w2b.state, after['wf_done-001'].state], ['stopped', 'stopped', 'done']);
 });

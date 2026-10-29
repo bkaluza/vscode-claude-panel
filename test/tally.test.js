@@ -51,3 +51,8 @@ test('label: singular and plural', () => {
   assert.equal(t.label('agents', 1), '1 agent running');
   assert.equal(t.label('agents', 4), '4 agents running');
 });
+
+test('tally: a running workflow row is not an agent, its agents are', () => {
+  const out = t.tally([s('idle', { open: true, agents: [{ state: 'run', workflow: true }, run, run, done] })]);
+  assert.equal(out.agents, 2);
+});

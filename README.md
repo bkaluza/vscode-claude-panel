@@ -34,7 +34,8 @@ terminals, and reopen them after a restart.
 - **Remembers what was open**: after a restart it offers to reopen them. A session is forgotten only when you close
   its terminal or exit Claude in it.
 - **Subagents**: a session that spawned agents shows *› N agents · M running*; expand it to list them with their
-  state and elapsed time, and click one to open it in a read-only view.
+  state and elapsed time, and click one to open it in a read-only view. A Workflow run is one row with its phase and
+  how many of its agents are done; its agents fold under it.
 - **Read-only view** of a session's transcript in an editor tab, following it live: your prompts, Claude's replies,
   tool calls with their input and results, subagents (open each in its own view), compactions and turn times.
   From the `⋯` menu or **Session Panel: Open Read-only View…**.

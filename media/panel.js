@@ -8,6 +8,7 @@
   let renderLater = false;
   ui.agents ||= {}; // session id → true (subagents expanded) or 'all' (older ones too)
   ui.results ||= {}; // the same for its results
+  ui.wf ||= {}; // workflow run id → its agents shown or not (unset: shown while it runs)
   // session id → false / true (the sessions it started collapsed / expanded, as you left them), or 'all' (older ones
   // too). Unset: expanded while one of them is recent, collapsed when they're all older.
   ui.kids ||= {};
@@ -172,6 +173,11 @@
         break;
       case 'agentsAll':
         ui.agents[id] = ui.agents[id] === 'all' ? true : 'all';
+        save();
+        render();
+        break;
+      case 'wf':
+        ui.wf[el.dataset.wf] = el.getAttribute('aria-expanded') !== 'true';
         save();
         render();
         break;
@@ -387,7 +393,7 @@
 
   const AGENT_RECENT_MS = 3 * 3600000; // finished agents listed without "Show older"
   const AGENT_STATES = { run: 'running', done: 'done', failed: 'failed', stopped: 'stopped' };
-  const runningAgents = (s) => (s.agents || []).filter((a) => a.state === 'run').length;
+  const runningAgents = (s) => (s.agents || []).filter((a) => a.state === 'run' && !a.workflow).length;
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
   function elapsed(ms) {
@@ -402,10 +408,11 @@
     if (!s.agents?.length) return '';
     const open = !!ui.agents[s.id] || (ui.chip === 'agents' && runningAgents(s) > 0);
     const run = runningAgents(s);
+    const n = s.agents.filter((a) => !a.workflow).length;
     return `
           <button class="agents-toggle${open ? ' expanded' : ''}" data-act="agents" aria-expanded="${open}"
                   title="${open ? 'Hide' : 'Show'} subagents">
-            ${icon('chevron')}<span>${plural(s.agents.length, 'agent')}</span>${run ? `<span class="agents-run">· ${run} running</span>` : ''}
+            ${icon('chevron')}<span>${plural(n, 'agent')}</span>${run ? `<span class="agents-run">· ${run} running</span>` : ''}
           </button>`;
   }
 
@@ -425,16 +432,37 @@
         </button>`;
   }
 
+  // A workflow run, folding the agents it started: "review-mr · Verify · 5/11 done".
+  function workflowRow(s, w) {
+    const kids = s.agents.filter((a) => a.wf === w.id);
+    const open = ui.wf[w.id] ?? w.state === 'run';
+    const run = w.state === 'run';
+    const time = run
+      ? `<span class="agent-time" data-since="${w.start}">${elapsed(w.start)}</span>`
+      : `<span class="agent-time">${esc(ago(w.end))}</span>`;
+    const done = kids.filter((a) => a.state === 'done').length;
+    const sub = ['workflow', run ? w.phase : AGENT_STATES[w.state], `${done}/${kids.length} done`];
+    return `
+        <button class="agent workflow a-${w.state}${open ? ' expanded' : ''}" data-act="wf" data-wf="${esc(w.id)}" aria-expanded="${open}"
+                title="${esc(`${w.desc}\nStarted ${new Date(w.start).toLocaleString()}\n${open ? 'Hide' : 'Show'} its agents`)}">
+          ${icon('chevron')}
+          <span class="agent-desc">${esc(w.desc)}</span>
+          ${time}
+          <span class="agent-sub">${esc(sub.filter(Boolean).join(' · '))}</span>
+        </button>${open ? kids.map(agentRow).join('') : ''}`;
+  }
+
   // Running agents plus those finished in the last few hours; the rest behind "Show N older".
   function agentList(s) {
     const mode = ui.agents[s.id] || (ui.chip === 'agents' && runningAgents(s) ? true : undefined);
     if (!mode || !s.agents?.length) return '';
     const cutoff = Date.now() - AGENT_RECENT_MS;
-    let recent = s.agents.filter((a) => a.state === 'run' || a.end >= cutoff);
-    if (!recent.length) recent = s.agents.slice(0, 5); // nothing lately: the last few
+    const top = s.agents.filter((a) => !a.wf); // a workflow's agents come with it
+    let recent = top.filter((a) => a.state === 'run' || a.end >= cutoff);
+    if (!recent.length) recent = top.slice(0, 5); // nothing lately: the last few
     const all = mode === 'all';
-    const shown = all ? s.agents : recent;
-    const older = s.agents.length - recent.length;
+    const shown = all ? top : recent;
+    const older = top.length - recent.length;
     const more = all
         ? older
           ? `<button class="link agents-more" data-act="agentsAll">Show recent only</button>`
@@ -444,7 +472,7 @@
           : '';
     return `
       <div class="agents" data-id="${esc(s.id)}" role="group" aria-label="Subagents of ${esc(s.title)}">
-        ${shown.map(agentRow).join('')}
+        ${shown.map((a) => (a.workflow ? workflowRow(s, a) : agentRow(a))).join('')}
         ${more}
       </div>`;
   }

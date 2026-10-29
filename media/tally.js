@@ -9,7 +9,7 @@
     agents: (s) => !!s.status && runningAgents(s) > 0,
   };
 
-  const runningAgents = (s) => (s.agents || []).filter((a) => a.state === 'run').length;
+  const runningAgents = (s) => (s.agents || []).filter((a) => a.state === 'run' && !a.workflow).length;
 
   /** Does a session count for this chip? */
   const matches = (kind, s) => !!KINDS[kind]?.(s);

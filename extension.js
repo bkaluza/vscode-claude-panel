@@ -973,7 +973,7 @@ async function openResult(id, key) {
   return vscode.commands.executeCommand('vscode.open', uri);
 }
 
-const runningAgents = (agents) => agents.filter((a) => a.state === 'run').length;
+const runningAgents = (agents) => agents.filter((a) => a.state === 'run' && !a.workflow).length;
 
 // The view's header: its title and what the session or agent is doing, from the same state the panel shows.
 function describeView(t) {
