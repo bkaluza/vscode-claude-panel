@@ -1,15 +1,12 @@
 # Changelog
 
-## 0.14.0 (unreleased)
+## 0.14.0
 
 - **Workflow runs** among a session's subagents: one row per run, with its phase and how many of its agents are
   done (*review-mr · 5/11 done*), and the agents it started folded under it, open while it runs. An agent
   counts as done only once the run's journal has its result, the run's time starts at its launch, and up to 100 of
   its agents are listed. They open in the read-only view like other subagents, nested ones too. The chips and the
   status bar count a run's agents, not the run. Thanks to Klemen Kubelj.
-
-## Unreleased
-
 - Resuming a session no longer picks a terminal the panel closed itself (*Close session*, or after handing the
   session to Claude Desktop), which some editors keep listing and which fail when used again; nothing still queued
   for it (`/color`, `/rename`) is sent. Thanks to Klemen Kubelj.
