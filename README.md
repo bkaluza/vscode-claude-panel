@@ -17,9 +17,10 @@ terminals, and reopen them after a restart.
   app while they're working, waiting for you, or went idle in the last hour. Ones idle for longer (the desktop app
   keeps every session in its sidebar running) move to the day groups, still marked as running elsewhere, and come
   back when they get busy again. Those in the desktop app are tagged *Claude app*.
-- **Sessions started by another one** in the Claude desktop app (macOS) are listed under it, *› 3 sessions*, and
-  forks made in the app are marked *Fork*. This comes from the app's own records of which session started which,
-  so it only applies to sessions started from the desktop app.
+- **Sessions started by another one** are listed under it, *› 3 sessions*: in the Claude desktop app (macOS), from
+  the app's own records, with forks marked *Fork*; and with `claude --bg`, from the starting session's transcript,
+  marked *Background*. With `claudeSessions.wakeParent` on, the starting session gets a one-line note (its name and
+  `claude logs <id>`, never its output) once the background one finishes and it is idle in this window.
 - **What it's doing now**: a live session's card has one line for its current step: *Editing extension.js*,
   *Running npm test*, *Searching for 'foo'*, *Running 2 agents*, *Thinking…*, or *Waiting: permission prompt*.
   Running subagents show theirs too.
@@ -103,6 +104,7 @@ changes.
 | `claudeSessions.sessionShortcuts` | `true` | Cmd+1–9 to switch sessions, and the ⌘N hints |
 | `claudeSessions.restoreOnStartup` | `ask` | reopen last window's sessions: `ask`, `always` or `never` |
 | `claudeSessions.notifyWhenDone` | `true` | notify when a session finishes or needs you while you're elsewhere |
+| `claudeSessions.wakeParent` | `false` | tell a session when a `claude --bg` session it started finishes |
 | `claudeSessions.skipPermissions` | `false` | start sessions with `--dangerously-skip-permissions` (also the switch in the panel) |
 | `claudeSessions.includeSubfolders` | `true` | also list sessions started in subfolders of the workspace |
 | `claudeSessions.maxRecent` | `100` | how many past sessions to list |

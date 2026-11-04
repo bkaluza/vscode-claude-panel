@@ -19,6 +19,7 @@ const accountsOf = require('./accounts');
 const handoff = require('./handoff');
 const results = require('./results');
 const terminals = require('./terminals');
+const spawned = require('./spawned');
 
 // Each account's config directory (~/.claude, or $CLAUDE_CONFIG_DIR, unless claudeSessions.accounts lists several)
 // has projects/ with the transcripts and sessions/, where Claude Code writes <pid>.json for every running session:
@@ -34,6 +35,7 @@ const PREFS_KEY = 'claudeSessions.prefs'; // globalState: { [id]: { pinned, hidd
 const PIN_ORDER_KEY = 'claudeSessions.pinOrder'; // globalState: pinned ids in the order you put them in
 const SLOT_KEYS_DECLINED_KEY = 'claudeSessions.slotKeysDeclined'; // globalState: "Not now" to commandsToSkipShell
 const SPLIT_TIP_KEY = 'claudeSessions.splitTipShown'; // globalState: the split-layout tip was answered
+const WOKEN_KEY = 'claudeSessions.woken'; // globalState: background sessions whose parent was told they finished
 const ACCOUNT_KEY = 'claudeSessions.account'; // workspaceState: config dir of the account last picked for a new session
 const SLOT_COMMANDS = Array.from({ length: 9 }, (_, i) => `claudeSessions.focus${i + 1}`);
 const PANEL_COMMANDS = ['claudeSessions.showPanel', 'claudeSessions.resume', 'claudeSessions.new'];
@@ -77,6 +79,10 @@ const termMisses = new Map();
 /** child session id → { parentCliId, kind }, from the Claude desktop app's metadata; and parent → its children */
 let lineage = new Map();
 let childrenOf = new Map();
+let appLineage; // the desktop app's links, as last read
+let bgKey = ''; // the claude --bg links, as last read
+/** parent id → notes to type into it once it's idle: background sessions it started finished. */
+const pendingWake = new Map();
 const readDesktop = desktop.reader();
 /** ids that finished working while you weren't looking at them */
 const unread = new Set();
@@ -334,9 +340,25 @@ async function pollLive() {
       if (cfg().get('notifyWhenDone')) vscode.window.showInformationMessage(`${titleOf(id)} is done.`, 'Show').then(show);
     }
   }
+  if (cfg().get('wakeParent')) queueWakes(next);
   live = next;
   for (const id of unread) if (!live.get(id)?.terminal) unread.delete(id);
   trackRemembered();
+}
+
+// A background session that a session started finished: tell that session, once per child.
+function queueWakes(next) {
+  const woken = context.globalState.get(WOKEN_KEY, []);
+  const add = [];
+  for (const [child, { parentCliId, kind }] of lineage) {
+    if (kind !== 'bg' || woken.includes(child)) continue;
+    if (!spawned.finished(live.get(child)?.status, next.get(child)?.status)) continue;
+    const short = child.slice(0, 8);
+    const note = spawned.note(sessions.get(parentCliId)?.spawned?.get(short)?.name, short);
+    (pendingWake.get(parentCliId) || pendingWake.set(parentCliId, []).get(parentCliId)).push(note);
+    add.push(child);
+  }
+  if (add.length) context.globalState.update(WOKEN_KEY, [...woken, ...add].slice(-200));
 }
 
 // Keeps the list of sessions open in this window, for reopening after a restart. A session leaves the
@@ -366,6 +388,12 @@ function trackRemembered() {
       pendingName.delete(e.terminal);
       const has = [names.fromClaude(sessions.get(id)), e.nameSource === 'user' ? names.clean(e.name) : ''];
       if (rename.id === id && rename.name && !has.includes(rename.name)) commands.push(`/rename ${rename.name}`);
+    }
+    // Background sessions it started that finished (queueWakes).
+    const wake = pendingWake.get(id);
+    if (wake) {
+      pendingWake.delete(id);
+      commands.push(...wake);
     }
     // Last: /desktop ends the session here.
     if (pendingDesktop.delete(e.terminal)) {
@@ -1066,10 +1094,27 @@ function activeElsewhere(id, seen = new Set()) {
   return (childrenOf.get(id) || []).some((c) => activeElsewhere(c, seen));
 }
 
+// Sessions started with claude --bg, from their parent's transcript: child id → { parentCliId, kind: 'bg' }.
+function bgLinks() {
+  const ids = [...new Set([...sessions.keys(), ...live.keys()])];
+  const out = new Map();
+  for (const [parent, s] of sessions) {
+    for (const short of s.spawned?.keys() || []) {
+      const child = spawned.resolve(short, ids);
+      if (child && child !== parent) out.set(child, { parentCliId: parent, kind: 'bg' });
+    }
+  }
+  return out;
+}
+
 async function readLineage() {
-  const next = await readDesktop();
-  if (next === lineage) return;
-  lineage = next;
+  const app = await readDesktop();
+  const bg = bgLinks();
+  const key = JSON.stringify([...bg]);
+  if (app === appLineage && key === bgKey) return;
+  appLineage = app;
+  bgKey = key;
+  lineage = new Map([...bg, ...app]); // the desktop app's own records win
   childrenOf = new Map();
   for (const [child, { parentCliId }] of lineage) (childrenOf.get(parentCliId) || childrenOf.set(parentCliId, []).get(parentCliId)).push(child);
 }
@@ -1153,9 +1198,10 @@ function payload() {
       cache: l && cfg().get('showCacheTimer') && usage.coldAt(s) ? [usage.coldAt(s), s.cacheTtl || ''] : undefined,
       agents,
       results: cfg().get('showResults') ? results.forPayload(s.results) : undefined, // what it published, opened or sent you
-      // the session that started it, when the Claude desktop app says so: shown under it
+      // the session that started it, when the Claude desktop app or its claude --bg call says so: shown under it
       parent: lineage.get(id)?.parentCliId || '',
       fork: lineage.get(id)?.kind === 'fork',
+      bg: lineage.get(id)?.kind === 'bg',
       // active or last active within the cut-off: shown in a parent's nested list without "Show N older"
       recent: elsewhere.recent({
         rec: away ? l : undefined,

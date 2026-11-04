@@ -530,7 +530,7 @@
 
   // ---------------------------------------------------------------- sessions started by another one
 
-  // The disclosure line under a session that started others in the Claude desktop app: "› 3 sessions". Collapsed,
+  // The disclosure line under a session that started others (Claude desktop app, claude --bg): "› 3 sessions". Collapsed,
   // it says which of them are working or need you.
   function kidsToggle(s) {
     const list = kids.get(s.id);
@@ -542,7 +542,7 @@
     const note = open ? '' : [busy ? `${busy} working` : '', waiting ? `${waiting} need${waiting > 1 ? '' : 's'} you` : ''].filter(Boolean);
     return `
           <button class="agents-toggle kids-toggle${open ? ' expanded' : ''}" data-act="kids" aria-expanded="${open}"
-                  title="${open ? 'Hide' : 'Show'} the sessions it started in the Claude app">
+                  title="${open ? 'Hide' : 'Show'} the sessions it started">
             ${icon('chevron')}<span>${plural(all.length, 'session')}</span>${note.length ? `<span class="agents-run">· ${esc(note.join(' · '))}</span>` : ''}
           </button>`;
   }
@@ -578,6 +578,13 @@
     if (!s.fork || !kids.get(s.parent)?.includes(s.id)) return '';
     const from = byId.get(s.parent)?.title;
     return `<span class="pill elsewhere fork" title="${esc(`Forked from ${from || 'the session above'} in the Claude app`)}">Fork</span>`;
+  }
+
+  // A session started with claude --bg, nested under the session that started it.
+  function bgTag(s) {
+    if (!s.bg || !kids.get(s.parent)?.includes(s.id)) return '';
+    const from = byId.get(s.parent)?.title;
+    return `<span class="pill elsewhere fork" title="${esc(`Started in the background by ${from || 'the session above'}`)}">Background</span>`;
   }
 
   // Where a session running elsewhere runs, when we know: the Claude desktop app. In place of the Elsewhere pill, and
@@ -632,6 +639,7 @@
             <span class="title">${esc(s.title)}</span>
             ${slotHint(s)}
             ${forkTag(s)}
+            ${bgTag(s)}
             ${accountTag(s)}
             ${whereTag(s)}
             ${statusPill(s)}

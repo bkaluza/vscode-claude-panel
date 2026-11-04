@@ -397,6 +397,11 @@
           "default": true,
           "description": "Show a notification when a session finishes working while you're looking at something else."
         },
+        "claudeSessions.wakeParent": {
+          "type": "boolean",
+          "default": false,
+          "description": "When a session started with `claude --bg` finishes, type a short note into the session that started it, once it's idle in this window."
+        },
         "claudeSessions.maxRecent": {
           "type": "number",
           "default": 100,

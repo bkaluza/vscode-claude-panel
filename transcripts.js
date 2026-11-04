@@ -7,6 +7,7 @@ const usage = require('./usage');
 const subagents = require('./subagents');
 const activity = require('./activity');
 const results = require('./results');
+const spawned = require('./spawned');
 
 /** Claude Code's config dir: $CLAUDE_CONFIG_DIR when set (Claude Code's own override), else ~/.claude. */
 function claudeDir(env = process.env, home = os.homedir()) {
@@ -79,6 +80,7 @@ function readChunk(info, text) {
   subagents.scanText(info, text); // subagent completions, for subagents.update()
   info.act = activity.scan(info.act, text); // what it's doing now, for the card's activity line
   info.results = results.scan(info.results, text); // what it published, opened or sent you
+  info.spawned = spawned.scan(info.spawned, text); // sessions it started with claude --bg
 }
 
 /** file → { offset, info } — session files are append-only, so only new bytes are parsed */
