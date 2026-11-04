@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.0
 
 - Sessions started with `claude --bg` are listed under the session that started them, marked *Background*; with
   `claudeSessions.wakeParent` on, that session is told (its name and `claude logs <id>`) when one finishes, while
