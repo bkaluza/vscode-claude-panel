@@ -155,7 +155,7 @@ test('commandEnv: the typed command sets the account once there are several, or 
 test('envPrefix: words in front of the command, quoted; nothing when there is nothing to set', () => {
   assert.equal(accounts.envPrefix(undefined, quote), '');
   assert.equal(accounts.envPrefix({}, quote), '');
-  assert.equal(accounts.envPrefix({ CLAUDE_CONFIG_DIR: null }, quote), 'env -u CLAUDE_CONFIG_DIR ');
+  assert.equal(accounts.envPrefix({ CLAUDE_CONFIG_DIR: null }, quote), 'unset CLAUDE_CONFIG_DIR && ');
   assert.equal(accounts.envPrefix({ CLAUDE_CONFIG_DIR: '/home/u/.claude-work' }, quote), 'CLAUDE_CONFIG_DIR=/home/u/.claude-work ');
   assert.equal(accounts.envPrefix({ CLAUDE_CONFIG_DIR: "/home/u/My Claude's" }, quote), String.raw`CLAUDE_CONFIG_DIR='/home/u/My Claude'\''s' `);
   assert.equal(accounts.envPrefix({ CLAUDE_CONFIG_DIR: '/a/$(rm -rf x);`b`' }, quote), `CLAUDE_CONFIG_DIR='/a/$(rm -rf x);\`b\`' `);

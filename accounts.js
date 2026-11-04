@@ -87,10 +87,13 @@ function commandEnv(account, { several = false, env = process.env, home = os.hom
   return { CLAUDE_CONFIG_DIR: isDefault(account, { home, realpath }) ? null : account.dir };
 }
 
-/** `want` (from commandEnv or terminalEnv) as words in front of a command: `CLAUDE_CONFIG_DIR=<dir> ` or `env -u …`. */
+/**
+ * `want` (from commandEnv or terminalEnv) as words in front of a command: `CLAUDE_CONFIG_DIR=<dir> ` or
+ * `unset CLAUDE_CONFIG_DIR && `. Not `env -u`: env runs only programs, and the command can be a shell alias.
+ */
 function envPrefix(want, quote) {
   if (!want || !('CLAUDE_CONFIG_DIR' in want)) return '';
-  return want.CLAUDE_CONFIG_DIR === null ? 'env -u CLAUDE_CONFIG_DIR ' : `CLAUDE_CONFIG_DIR=${quote(want.CLAUDE_CONFIG_DIR)} `;
+  return want.CLAUDE_CONFIG_DIR === null ? 'unset CLAUDE_CONFIG_DIR && ' : `CLAUDE_CONFIG_DIR=${quote(want.CLAUDE_CONFIG_DIR)} `;
 }
 
 /**
