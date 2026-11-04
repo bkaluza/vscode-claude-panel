@@ -20,7 +20,8 @@ terminals, and reopen them after a restart.
 - **Sessions started by another one** are listed under it, *› 3 sessions*: in the Claude desktop app (macOS), from
   the app's own records, with forks marked *Fork*; and with `claude --bg`, from the starting session's transcript,
   marked *Background*. With `claudeSessions.wakeParent` on, the starting session gets a one-line note (its name and
-  `claude logs <id>`, never its output) once the background one finishes and it is idle in this window.
+  `claude logs <id>`, never its output) once the background one finishes and it is idle in this window, waiting
+  until you aren't looking at that terminal.
 - **What it's doing now**: a live session's card has one line for its current step: *Editing extension.js*,
   *Running npm test*, *Searching for 'foo'*, *Running 2 agents*, *Thinking…*, or *Waiting: permission prompt*.
   Running subagents show theirs too.

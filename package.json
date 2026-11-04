@@ -400,7 +400,7 @@
         "claudeSessions.wakeParent": {
           "type": "boolean",
           "default": false,
-          "description": "When a session started with `claude --bg` finishes, type a short note into the session that started it, once it's idle in this window."
+          "description": "When a session started with `claude --bg` finishes, type a short note into the session that started it, once it's idle in this window and you aren't looking at its terminal."
         },
         "claudeSessions.maxRecent": {
           "type": "number",

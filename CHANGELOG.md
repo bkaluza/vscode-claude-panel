@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Sessions started with `claude --bg` are listed under the session that started them, marked *Background*; with
+  `claudeSessions.wakeParent` on, that session is told (its name and `claude logs <id>`) when one finishes, while
+  you aren't looking at its terminal. Thanks to Klemen Kubelj.
+- With several accounts, a `~/.claude` account whose `command` is a shell alias starts again (the panel types
+  `unset CLAUDE_CONFIG_DIR &&`, not `env -u`). Thanks to Klemen Kubelj.
+
 ## 0.14.0
 
 - **Workflow runs** among a session's subagents: one row per run, with its phase and how many of its agents are
