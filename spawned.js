@@ -58,4 +58,25 @@ function note(name, short) {
   return `Background session ${who} finished. See its output with: claude logs ${short}`;
 }
 
-module.exports = { CAP, scan, resolve, finished, note };
+/**
+ * The background sessions to tell their parent about now: each 'bg' link (lineage: child → { parentCliId, kind })
+ * whose child finished between `before` and `after` (session id → status), that no window has told yet (`woken`),
+ * and whose parent runs in one of this window's terminals (`here(parent)`): only that window can type the note, so
+ * only it marks the child. Returns [{ parent, child }].
+ */
+function wakes(lineage, { before, after, woken = [], here }) {
+  const out = [];
+  for (const [child, { parentCliId, kind }] of lineage) {
+    if (kind !== 'bg' || woken.includes(child) || !here(parentCliId)) continue;
+    if (finished(before(child), after(child))) out.push({ parent: parentCliId, child });
+  }
+  return out;
+}
+
+/** Drops the notes queued for parents no longer running in this window (`pending`: parent → notes). */
+function prune(pending, here) {
+  for (const p of [...pending.keys()]) if (!here(p)) pending.delete(p);
+  return pending;
+}
+
+module.exports = { CAP, scan, resolve, finished, note, wakes, prune };

@@ -100,3 +100,41 @@ test('readChunk records the children a session started', () => {
   transcripts.readChunk(info, started('0a1b2c3d', 'fix-tests'));
   assert.deepEqual(brief(info.spawned), [['0a1b2c3d', 'fix-tests']]);
 });
+
+const links = (entries) => new Map(entries.map(([child, parentCliId, kind = 'bg']) => [child, { parentCliId, kind }]));
+const statuses = (o) => (id) => o[id];
+
+test('wakes: finished background children of a parent with a terminal in this window, not yet told', () => {
+  const lineage = links([
+    ['c1', 'p1'], // finished: busy → idle
+    ['c2', 'p1'], // exited while working: busy → gone
+    ['c3', 'p1'], // still busy
+    ['c4', 'p1'], // finished, but another window told p1 already
+    ['c5', 'p2'], // finished, but p2's terminal is in another window
+    ['c6', 'p1', 'spawned'], // the desktop app's link, not --bg
+  ]);
+  const before = statuses({ c1: 'busy', c2: 'busy', c3: 'busy', c4: 'busy', c5: 'busy', c6: 'busy' });
+  const after = statuses({ c1: 'idle', c3: 'busy', c4: 'idle', c5: 'idle', c6: 'idle' });
+  const out = spawned.wakes(lineage, { before, after, woken: ['c4'], here: (p) => p === 'p1' });
+  assert.deepEqual(out, [
+    { parent: 'p1', child: 'c1' },
+    { parent: 'p1', child: 'c2' },
+  ]);
+});
+
+test('wakes: nothing in a window without the parent, so the child stays unmarked for the one that has it', () => {
+  const lineage = links([['c1', 'p1']]);
+  const opts = { before: statuses({ c1: 'busy' }), after: statuses({ c1: 'idle' }), woken: [] };
+  assert.deepEqual(spawned.wakes(lineage, { ...opts, here: () => false }), []);
+  assert.deepEqual(spawned.wakes(lineage, { ...opts, here: () => true }), [{ parent: 'p1', child: 'c1' }]);
+});
+
+test('prune: notes for parents no longer running in this window are dropped', () => {
+  const pending = new Map([
+    ['p1', ['a']],
+    ['p2', ['b', 'c']],
+  ]);
+  spawned.prune(pending, (p) => p === 'p2');
+  assert.deepEqual([...pending], [['p2', ['b', 'c']]]);
+  assert.equal(spawned.prune(new Map(), () => false).size, 0);
+});

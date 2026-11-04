@@ -81,7 +81,7 @@ let lineage = new Map();
 let childrenOf = new Map();
 let appLineage; // the desktop app's links, as last read
 let bgKey = ''; // the claude --bg links, as last read
-/** parent id → notes to type into it once it's idle: background sessions it started finished. */
+/** parent id → notes to type into it once it's idle and you aren't looking at it: background sessions it started finished. */
 const pendingWake = new Map();
 const readDesktop = desktop.reader();
 /** ids that finished working while you weren't looking at them */
@@ -341,24 +341,31 @@ async function pollLive() {
     }
   }
   if (cfg().get('wakeParent')) queueWakes(next);
+  else pendingWake.clear();
   live = next;
   for (const id of unread) if (!live.get(id)?.terminal) unread.delete(id);
   trackRemembered();
 }
 
-// A background session that a session started finished: tell that session, once per child.
+// A background session that a session started finished: tell that session, once per child. Only the window with
+// the parent's terminal queues and marks it (WOKEN_KEY is shared by every window), and notes for a parent no longer
+// running in a terminal here are dropped.
 function queueWakes(next) {
+  const here = (id) => !!next.get(id)?.terminal;
+  spawned.prune(pendingWake, here);
   const woken = context.globalState.get(WOKEN_KEY, []);
-  const add = [];
-  for (const [child, { parentCliId, kind }] of lineage) {
-    if (kind !== 'bg' || woken.includes(child)) continue;
-    if (!spawned.finished(live.get(child)?.status, next.get(child)?.status)) continue;
+  const found = spawned.wakes(lineage, {
+    before: (id) => live.get(id)?.status,
+    after: (id) => next.get(id)?.status,
+    woken,
+    here,
+  });
+  for (const { parent, child } of found) {
     const short = child.slice(0, 8);
-    const note = spawned.note(sessions.get(parentCliId)?.spawned?.get(short)?.name, short);
-    (pendingWake.get(parentCliId) || pendingWake.set(parentCliId, []).get(parentCliId)).push(note);
-    add.push(child);
+    const note = spawned.note(sessions.get(parent)?.spawned?.get(short)?.name, short);
+    (pendingWake.get(parent) || pendingWake.set(parent, []).get(parent)).push(note);
   }
-  if (add.length) context.globalState.update(WOKEN_KEY, [...woken, ...add].slice(-200));
+  if (found.length) context.globalState.update(WOKEN_KEY, [...woken, ...found.map((w) => w.child)].slice(-200));
 }
 
 // Keeps the list of sessions open in this window, for reopening after a restart. A session leaves the
@@ -389,9 +396,10 @@ function trackRemembered() {
       const has = [names.fromClaude(sessions.get(id)), e.nameSource === 'user' ? names.clean(e.name) : ''];
       if (rename.id === id && rename.name && !has.includes(rename.name)) commands.push(`/rename ${rename.name}`);
     }
-    // Background sessions it started that finished (queueWakes).
+    // Background sessions it started that finished (queueWakes): only while you aren't looking at its terminal, so
+    // the note and its Enter never go in with something you're typing there; else on a later poll.
     const wake = pendingWake.get(id);
-    if (wake) {
+    if (wake && !watching(e.terminal)) {
       pendingWake.delete(id);
       commands.push(...wake);
     }
